@@ -737,6 +737,34 @@ function recordReel(reelKey) {
   persistSession();
   maybeShowWarning();
 }
+function isStoriesContext(video) {
+  if (
+    location.pathname.includes("/stories/") ||
+    location.pathname.includes("/stories")
+  ) {
+    return true;
+  }
+
+  let node = video;
+
+  for (let depth = 0; depth < 8 && node; depth++) {
+    const text = (node.innerText || "").toLowerCase();
+    const ariaLabel = (node.getAttribute?.("aria-label") || "").toLowerCase();
+    const role = (node.getAttribute?.("role") || "").toLowerCase();
+
+    if (
+      text.includes("story") ||
+      ariaLabel.includes("story") ||
+      role.includes("dialog")
+    ) {
+      return true;
+    }
+
+    node = node.parentElement;
+  }
+
+  return false;
+}
 
 function checkReelChange() {
   if (modalShown || isHardLocked) return;
@@ -744,13 +772,15 @@ function checkReelChange() {
   const now = Date.now();
 
   const isInstagram = location.hostname.includes("instagram.com");
+
   const hasVideos = document.querySelectorAll("video").length > 0;
+  const isStoryPage = location.pathname.includes("/stories/");
 
   const isReelsContext =
-  location.pathname.includes("/reels") ||
-  location.pathname.includes("/reel/") ||
-  hasVideos;
-  
+    location.pathname.includes("/reels") ||
+    location.pathname.includes("/reel/") ||
+    (hasVideos && !isStoryPage);
+    
   if (!isInstagram || !isReelsContext) {
     updateUI("idle");
     return;
@@ -765,6 +795,11 @@ function checkReelChange() {
 
   if (!video) {
     updateUI("looking...");
+    return;
+  }
+
+  if (isStoriesContext(video)) {
+    updateUI("stories ignored");
     return;
   }
 
