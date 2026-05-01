@@ -1,6 +1,6 @@
 
 <p align="center">
-  <img src="assets/loopbreaker-banner.png" alt="Loopbreaker banner: Break the pattern today or the loop will repeat tomorrow" width="700">
+  <img src="loopbreaker-banner.png" alt="Loopbreaker banner: Break the pattern today or the loop will repeat tomorrow" width="700">
 </p>
 
 # Loopbreaker
