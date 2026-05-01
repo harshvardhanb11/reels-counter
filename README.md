@@ -232,6 +232,15 @@ Night scrolling is treated as higher risk, so Loopbreaker intervenes earlier.
 | 60 | 45 second pause-lock |
 | 90 | 60 second pause-lock |
 
+### Endgame mode
+
+After the final checkpoint, Loopbreaker keeps applying pressure instead of going silent.
+
+| Mode | Endgame behavior |
+|---|---|
+| Normal | After 100 reels, every +25 reels triggers another 60 second pause-lock |
+| Night | After 90 reels, every +15 reels triggers another 60 second pause-lock |
+
 Example night messages:
 
 ```text
@@ -306,6 +315,36 @@ Normal reminders are easy to ignore.
 **Fix:** Loopbreaker uses pause-locks instead of weak popups.
 
 When the loop gets strong enough, the app blocks interaction briefly and forces a real pause.
+
+---
+
+### Story videos false counts
+
+Instagram Stories can also contain videos, and earlier detection treated them like Reels.
+
+**Fix:** Loopbreaker now ignores Story contexts so watching a Story video does not unfairly increase the Reel counter.
+
+---
+
+### Same content, different identity
+
+Instagram can show the same Reel through different surfaces.
+
+For example:
+
+```text
+Feed preview  → counted by video source/poster
+Clicked Reel  → counted by /reel/<id>
+Back navigation → may expose a different DOM/video key
+```
+Earlier versions could accidentally count the same content twice when a user watched a video in the feed, clicked into it, or returned to it later.
+
+Fix: Loopbreaker now uses both:
+
+canonical Reel keys
+media fingerprints
+
+This means the same video is recognized even if Instagram changes how it appears in the DOM.
 
 ---
 
@@ -451,7 +490,18 @@ Current version includes:
 - night mode
 - local-only tracking
 
+
 ---
+## Known limitations
+
+Loopbreaker is still experimental.
+
+- Works only on Instagram Web for now
+- Feed detection may still include some non-Reel videos
+- Native Instagram mobile app tracking is not supported yet
+- No settings page yet
+- No daily dashboard yet
+- No Chrome Web Store release yet
 
 ## Roadmap
 

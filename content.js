@@ -20,6 +20,7 @@ function createFreshSession() {
     reelCount: 0,
     seenReels: [],
     reelEvents: [],
+    seenFingerprints: [],
     triggeredMilestones: [],
     continueCount: 0,
     lastReelKey: null,
@@ -62,10 +63,13 @@ let lastStatus = "loaded";
 let fullscreenCooldownUntil = 0;
 let currentCandidateKey = null;
 let currentCandidateSince = 0;
+let lastSeenKeyBeforeUrl = null;
+let lastSeenKeyBeforeUrlAt = 0;
 let isHardLocked = false;
 let sessionEnded = false;
 
 let seenReels = new Set(savedSession.seenReels || []);
+let seenFingerprints = new Set(savedSession.seenFingerprints || []);
 let reelEvents = savedSession.reelEvents || [];
 let triggeredMilestones = new Set(savedSession.triggeredMilestones || []);
 let continueCount = savedSession.continueCount || 0;
@@ -104,6 +108,7 @@ function persistSession() {
   if (sessionEnded) return;
 
   const seenArray = Array.from(seenReels);
+  const fingerprintArray = Array.from(seenFingerprints);
 
   const state = {
     date: getTodayKey(),
@@ -111,6 +116,7 @@ function persistSession() {
     lastActive: Date.now(),
     reelCount,
     seenReels: seenArray.slice(Math.max(0, seenArray.length - MAX_SEEN_REELS)),
+    seenFingerprints: fingerprintArray.slice(Math.max(0, fingerprintArray.length - MAX_SEEN_REELS)),
     reelEvents: reelEvents.slice(-250),
     triggeredMilestones: Array.from(triggeredMilestones),
     continueCount,
@@ -703,8 +709,46 @@ function getReelKey(video) {
 }
 
 // ---------- Counting ----------
-function recordReel(reelKey) {
+function getCanonicalKey(reelKey) {
+  if (!reelKey) return "";
+
+  if (reelKey.startsWith("url:")) {
+    return `reel:${reelKey.slice(4)}`;
+  }
+
+  if (reelKey.startsWith("link:")) {
+    return `reel:${reelKey.slice(5)}`;
+  }
+
+  return reelKey;
+}
+
+function getVideoFingerprint(video) {
+  if (!video) return "";
+
+  const src = cleanMediaUrl(
+    video.currentSrc ||
+    video.src ||
+    video.getAttribute("src") ||
+    ""
+  );
+
+  const poster = cleanMediaUrl(
+    video.poster ||
+    video.getAttribute("poster") ||
+    ""
+  );
+
+  if (src) return `media:${src}`;
+  if (poster) return `poster:${poster}`;
+
+  return "";
+}
+
+function recordReel(reelKey, fingerprint = "") {
   const now = Date.now();
+
+  reelKey = getCanonicalKey(reelKey);
 
   if (now - lastCountAt < 700) {
     return;
@@ -713,17 +757,26 @@ function recordReel(reelKey) {
   lastReelKey = reelKey;
   lastCountAt = now;
 
-  if (seenReels.has(reelKey)) {
+  const alreadySeenByKey = reelKey && seenReels.has(reelKey);
+  const alreadySeenByFingerprint = fingerprint && seenFingerprints.has(fingerprint);
+
+  if (alreadySeenByKey || alreadySeenByFingerprint) {
+    if (reelKey) seenReels.add(reelKey);
+    if (fingerprint) seenFingerprints.add(fingerprint);
+
     updateUI("already counted");
     persistSession();
     return;
   }
 
-  seenReels.add(reelKey);
+  if (reelKey) seenReels.add(reelKey);
+  if (fingerprint) seenFingerprints.add(fingerprint);
+
   reelCount++;
 
   reelEvents.push({
     key: reelKey,
+    fingerprint,
     time: now
   });
 
@@ -737,6 +790,7 @@ function recordReel(reelKey) {
   persistSession();
   maybeShowWarning();
 }
+
 function isStoriesContext(video) {
   if (
     location.pathname.includes("/stories/") ||
@@ -808,42 +862,47 @@ function checkReelChange() {
     return;
   }
 
-  const reelKey = getReelKey(video);
+  const rawReelKey = getReelKey(video);
+  const reelKey = getCanonicalKey(rawReelKey);
+  const fingerprint = getVideoFingerprint(video);
 
-  if (!reelKey) {
+  if (!reelKey && !fingerprint) {
     updateUI("weak signal");
     return;
   }
 
   if (reelKey !== currentCandidateKey) {
-    currentCandidateKey = reelKey;
-    currentCandidateSince = now;
+  currentCandidateKey = reelKey;
+  currentCandidateSince = now;
 
-    if (seenReels.has(reelKey)) {
-      updateUI("already counted");
-    } else {
-      updateUI("confirming reel...");
-    }
+  if (seenReels.has(reelKey)) {
+    updateUI("already counted");
+  } else {
+    updateUI("confirming reel...");
+  }
 
-    return;
+  return;
   }
 
   const dwellTime = now - currentCandidateSince;
 
   if (dwellTime < DWELL_MS) {
-    if (seenReels.has(reelKey)) {
+    if (
+      seenReels.has(reelKey) ||
+      (fingerprint && seenFingerprints.has(fingerprint))
+    ) {
       updateUI("already counted");
     } else {
       updateUI("confirming reel...");
     }
 
     return;
-  }
+} 
 
   if (!lastReelKey || reelKey !== lastReelKey) {
-    recordReel(reelKey);
-    return;
-  }
+  recordReel(reelKey, fingerprint);
+  return;
+}
 
   updateUI("watching");
 }
