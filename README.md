@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <i>A browser extension that counts Instagram Reels in real time and interrupts compulsive scrolling before it becomes a doom-scroll loop.</i>
+  <i>A browser extension that counts short-form videos like Instagram Reels and YouTube Shorts in real time, then interrupts compulsive scrolling before it becomes a doom-scroll loop.</i>
 </p>
 
 <p align="center">
@@ -17,31 +17,72 @@
   <img src="https://img.shields.io/badge/version-V3-black?style=for-the-badge" alt="version badge">
   <img src="https://img.shields.io/badge/privacy-local%20only-blue?style=for-the-badge" alt="privacy badge">
   <img src="https://img.shields.io/badge/platform-Brave%20%7C%20Chrome-orange?style=for-the-badge" alt="platform badge">
+  <img src="https://img.shields.io/badge/supports-Instagram%20%7C%20YouTube-red?style=for-the-badge" alt="supported platforms badge">
 </p>
 
 ---
 
+```md
 ## The idea
 
-Instagram Reels have no finish line.
+Short-form video feeds are addiction loops disguised as entertainment.
 
-You open the app for a quick break.  
+There is a reason this feels hard to stop.
+
+Some of the smartest product, design, and machine-learning teams in the world are paid to remove every point of friction between you and the next video.
+
+The feed does not end.  
+It does not pause.  
+It does not ask if you meant to keep going.  
+It does not care whether this was supposed to be a five-minute break.
+
+It just serves the next reel.
+
+They just serve the next reel.
+
+You open Instagram or YouTube for a quick break.  
 You scroll once.  
 Then again.  
 Then again.
+
+At some point, you are no longer choosing.
+
+You are just inside the loop.
 
 Before you notice it, the “quick break” has become:
 
 ```text
 30 reels watched in 46s.
 This is not a break anymore.
-```
 
-**Loopbreaker adds the missing stopping point.**
+Loopbreaker exists for that moment.
 
-It does not just track screen time.  
-It interrupts the scroll loop while it is happening.
+Most screen-time apps are post-mortems.
+They tell you at night that you wasted three hours.
 
+Loopbreaker is different.
+
+It interrupts the addiction loop while it is happening.
+
+It counts the reels.
+It shows the time.
+It measures loop pressure.
+Then it forces friction before the next video can pull you deeper.
+
+Research on short-video addiction points to the real risk signals: prolonged watch time, excessive video consumption, late-night usage, reduced content diversity, loss of time awareness, and repeated difficulty stopping. Loopbreaker turns those signals into real-time intervention.
+
+It is built on one belief:
+
+You do not beat infinite scroll with willpower alone.
+You beat it by adding a stopping point where the platform removed one.
+
+Loopbreaker is not just a counter.
+
+It is an addiction-killer for Reels-style feeds.
+
+The feed has no finish line.
+
+Loopbreaker gives you one.
 ---
 
 ## What Loopbreaker does
@@ -53,7 +94,7 @@ It tracks:
 | Signal | Meaning |
 |---|---|
 | Reels watched | How many unique reels/videos you consumed |
-| Session time | How long the current scroll session has lasted |
+| Active watch time | How long you were actually watching, not just leaving the tab open |
 | Loop pressure | How deep you are in the scroll loop |
 | Night scroll | Whether you are scrolling during high-risk late-night hours |
 | Continue behavior | Whether you keep choosing to stay in the loop |
@@ -155,7 +196,7 @@ Loopbreaker uses four layers.
 
 ### 1. Awareness
 
-The overlay constantly shows the number of reels watched and session time.
+The overlay constantly shows the number of reels watched and active session time.
 
 ```text
 24 reels watched in 5m 12s.
@@ -183,7 +224,7 @@ The line gives it weight.
 
 ### 3. Friction
 
-At key milestones, Loopbreaker pauses videos and blocks scrolling for a short countdown.
+At key reel-count and active-watch-time milestones, Loopbreaker pauses videos and blocks scrolling for a short countdown.
 
 This is the core intervention.
 
@@ -248,10 +289,47 @@ Sleep debt mode activated.
 You are trading tomorrow’s energy for tonight’s scroll.
 Night scroll detected. The loop is stronger now.
 ```
+### Time-based interventions
 
+Loopbreaker does not only count reels. It also watches for long active sessions.
+
+A user scrolling slowly for 30 minutes is still inside the loop, even if the reel count is not exploding.
+
+Loopbreaker therefore triggers interventions based on **active watch time** too.
+
+Active watch time only counts when:
+
+- the supported tab is visible
+- the browser window is focused
+- the user is on a supported Reels/Shorts page
+- a video is actually playing
+- the user is not inside a pause-lock modal
+
+This prevents unfair lockouts when Instagram or YouTube is simply open in the background.
+
+#### Normal mode
+
+| Active watch time | Intervention |
+|---:|---|
+| 5 min | Soft interrupt |
+| 10 min | 10 second pause-lock |
+| 20 min | 30 second pause-lock |
+| 30 min | 60 second pause-lock |
+| Every +10 min after | 60 second pause-lock |
+
+#### Night mode
+
+| Active watch time | Intervention |
+|---:|---|
+| 3 min | Soft interrupt |
+| 8 min | 10 second pause-lock |
+| 15 min | 25 second pause-lock |
+| 25 min | 45 second pause-lock |
+| Every +5 min after | 60 second pause-lock |
 ---
 
 ## Technical problems solved
+
 
 ### Duplicate counting
 
@@ -317,6 +395,18 @@ Normal reminders are easy to ignore.
 When the loop gets strong enough, the app blocks interaction briefly and forces a real pause.
 
 ---
+```md
+### Soft warnings were too easy to miss
+
+Early soft warnings only appeared as small text inside the floating overlay.
+
+That was too weak. Users could easily ignore the first warning and keep scrolling.
+
+**Fix:** Soft warnings now use a visible interrupt modal.
+
+The first warning does not lock the user, but it pauses the video and forces a moment of awareness before the user continues.
+
+This creates a lighter intervention before the stronger pause-locks begin.
 
 ### Story videos false counts
 
@@ -346,6 +436,23 @@ media fingerprints
 
 This means the same video is recognized even if Instagram changes how it appears in the DOM.
 
+---
+### Background tab unfairness
+
+A user should not be punished just because Instagram or YouTube was left open in another tab.
+
+Earlier versions used wall-clock session time, which meant the timer could keep growing even if the user was not actively watching.
+
+**Fix:** Loopbreaker now tracks active watch time instead of raw time.
+
+Active watch time only increases when the page is visible, the browser window is focused, the user is on a supported Reels/Shorts context, and a video is actually playing.
+
+This makes the timer fairer:
+
+```text
+Good: 10 minutes actively watching Reels
+Bad: 10 minutes with Instagram open in the background
+```
 ---
 
 ## Example messages
@@ -478,15 +585,25 @@ location.reload();
 
 ## Current status
 
-### Loopbreaker V3 — Stability + Intervention
+### Loopbreaker V3 — Multi-platform stability + intervention
 
-Current version includes:
+CCurrent version includes:
 
-- unique Reel counting
-- feed + Reels support
+- Instagram Reels support
+- Instagram feed video support
+- YouTube Shorts support
+- unique video counting
+- media fingerprinting
+- per-platform sessions
 - session persistence
 - hard pause-locks
+- visible soft interrupt modals
 - loop pressure meter
+- active watch-time tracking
+- time-based interventions
+- time endgame mode
+- focused-tab detection
+- background-tab protection
 - night mode
 - local-only tracking
 
@@ -496,9 +613,10 @@ Current version includes:
 
 Loopbreaker is still experimental.
 
-- Works only on Instagram Web for now
-- Feed detection may still include some non-Reel videos
-- Native Instagram mobile app tracking is not supported yet
+- Works only on Instagram Web/Youtube web for now
+- Native Instagram/Youtube mobile app tracking is not supported yet
+- Active watch-time detection depends on browser focus and visible playback state
+- Feed detection is heuristic and may still need tuning as Instagram changes its UI
 - No settings page yet
 - No daily dashboard yet
 - No Chrome Web Store release yet

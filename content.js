@@ -48,6 +48,8 @@ function createFreshSession() {
     startTime: Date.now(),
     lastActive: Date.now(),
     reelCount: 0,
+    activeWatchMs: 0,
+    triggeredTimeMilestones: [],
     seenReels: [],
     reelEvents: [],
     seenFingerprints: [],
@@ -104,6 +106,9 @@ let reelEvents = savedSession.reelEvents || [];
 let triggeredMilestones = new Set(savedSession.triggeredMilestones || []);
 let continueCount = savedSession.continueCount || 0;
 let pendingLock = savedSession.pendingLock || null;
+let activeWatchMs = savedSession.activeWatchMs || 0;
+let lastActiveWatchTickAt = Date.now();
+let triggeredTimeMilestones = new Set(savedSession.triggeredTimeMilestones || []);
 
 const WARNING_MESSAGES = [
   "The algorithm is getting comfortable.",
@@ -147,6 +152,8 @@ function persistSession() {
     reelCount,
     seenReels: seenArray.slice(Math.max(0, seenArray.length - MAX_SEEN_REELS)),
     seenFingerprints: fingerprintArray.slice(Math.max(0, fingerprintArray.length - MAX_SEEN_REELS)),
+    activeWatchMs,
+    triggeredTimeMilestones: Array.from(triggeredTimeMilestones),
     reelEvents: reelEvents.slice(-250),
     triggeredMilestones: Array.from(triggeredMilestones),
     continueCount,
@@ -190,7 +197,7 @@ function formatTime(seconds) {
 }
 
 function getImpactLine() {
-  const seconds = Math.floor((Date.now() - startTime) / 1000);
+  const seconds = getActiveSessionSeconds();
   const reelWord = reelCount === 1 ? getContentSingular() : getContentPlural();
 
   if (reelCount === 0) {
@@ -244,11 +251,55 @@ function getPressureLabel() {
   if (pressure >= 25) return "Building";
   return "Low";
 }
+function isWindowActuallyActive() {
+  return document.visibilityState === "visible" && document.hasFocus();
+}
+
+function getVisiblePlayingVideo() {
+  const video = getMostVisibleVideo();
+
+  if (!video) return null;
+  if (video.paused || video.ended) return null;
+
+  return video;
+}
+
+function isUserActivelyWatchingShortForm() {
+  if (!isWindowActuallyActive()) return false;
+  if (!isSupportedShortFormContext()) return false;
+
+  const video = getVisiblePlayingVideo();
+
+  if (!video) return false;
+  if (isStoriesContext(video)) return false;
+
+  return true;
+}
+
+function updateActiveWatchTime() {
+  const now = Date.now();
+
+  if (isUserActivelyWatchingShortForm() && !modalShown && !isHardLocked) {
+    activeWatchMs += now - lastActiveWatchTickAt;
+  }
+
+  lastActiveWatchTickAt = now;
+}
+
+function getActiveSessionSeconds() {
+  return Math.floor(activeWatchMs / 1000);
+}
 
 function updateUI(status = lastStatus) {
+  if (!isSupportedShortFormContext()) {
+    hideLoopbreakerUI();
+    return;
+  }
+  showLoopbreakerUI();
+
   lastStatus = status;
 
-  const seconds = Math.floor((Date.now() - startTime) / 1000);
+  const seconds = getActiveSessionSeconds();
   const level = getLevel();
   const pressure = getLoopPressure();
   const pressureLabel = getPressureLabel();
@@ -341,7 +392,23 @@ function blockIfHardLocked(event) {
 });
 
 function showSoftNudge(message) {
-  updateUI(message);
+   showSoftInterrupt(message);
+}
+
+function makeTimeWarningReason(seconds) {
+  const minutes = Math.floor(seconds / 60);
+
+  if (isNightScroll()) {
+    if (minutes >= 25) return "You are trading tomorrow’s brain for tonight’s feed.";
+    if (minutes >= 15) return "This is not rest. This is sleep debt forming.";
+    if (minutes >= 8) return "Night scrolling is getting expensive.";
+    return "The night loop has started.";
+  }
+
+  if (minutes >= 30) return "Half an hour disappeared into the feed.";
+  if (minutes >= 20) return "This is no longer a quick break.";
+  if (minutes >= 10) return "Ten minutes in. The loop is settling in.";
+  return "This break is starting to stretch.";
 }
 
 function getMilestonePlan() {
@@ -396,11 +463,70 @@ function resolvePendingLockAsContinued(lock) {
   continueCount += 1;
   persistSession();
 }
+function getNextContentLine() {
+  const platform = getPlatformId();
+
+  if (platform === "youtube") {
+    return "The next Short is designed to feel easier than stopping.";
+  }
+
+  return "The next reel is designed to feel easier than stopping.";
+}
+function showSoftInterrupt(message) {
+  if (modalShown) return;
+
+  modalShown = true;
+  pauseAllVideos();
+
+  const seconds = getActiveSessionSeconds();
+
+  const modal = document.createElement("div");
+  modal.id = "loopbreaker-modal";
+
+  modal.innerHTML = `
+    <div id="loopbreaker-modal-box">
+      <div class="loopbreaker-modal-eyebrow">Warning sign</div>
+
+      <h2>${message}</h2>
+
+      <p class="loopbreaker-impact-modal">
+        <strong>${reelCount}</strong> ${getContentPlural()} watched in <strong>${formatTime(seconds)}</strong>.
+      </p>
+
+      <p>
+        ${getWeightLine()}
+      </p>
+
+      <p class="loopbreaker-danger-note">
+        You are still early enough to leave cleanly. The next few swipes decide whether this becomes a loop.
+      </p>
+
+      <div class="loopbreaker-modal-actions">
+        <button id="loopbreaker-continue">Continue intentionally</button>
+        <button id="loopbreaker-exit">Break the loop</button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+
+  document.getElementById("loopbreaker-continue").onclick = () => {
+    modal.remove();
+    modalShown = false;
+    continueCount += 1;
+    persistSession();
+    updateUI("continued after warning");
+  };
+
+  document.getElementById("loopbreaker-exit").onclick = () => {
+    showExitSummary(modal);
+  };
+}
 
 function showHardLock(lock) {
   if (modalShown) return;
 
-  const sessionSeconds = Math.floor((Date.now() - startTime) / 1000);
+  const sessionSeconds = getActiveSessionSeconds();
 
   modalShown = true;
   isHardLocked = true;
@@ -433,7 +559,7 @@ function showHardLock(lock) {
       </p>
 
       <p class="loopbreaker-danger-note">
-        The next reel is designed to feel easier than stopping.
+        ${getNextContentLine()}
       </p>
 
       <div class="loopbreaker-modal-actions">
@@ -509,9 +635,17 @@ function showHardLock(lock) {
   intervalId = setInterval(tick, 250);
   tick();
 }
+  function getCloseButtonText() {
+    const platform = getPlatformId();
+
+    if (platform === "youtube") return "Close YouTube";
+    if (platform === "instagram") return "Close Instagram";
+
+    return "Close";
+  }
 
 function showExitSummary(existingModal) {
-  const seconds = Math.floor((Date.now() - startTime) / 1000);
+  const seconds = getActiveSessionSeconds();
 
   pendingLock = null;
   persistSession();
@@ -534,7 +668,7 @@ function showExitSummary(existingModal) {
       </p>
 
       <div class="loopbreaker-modal-actions">
-        <button id="loopbreaker-close">Close Instagram</button>
+        <button id="loopbreaker-close">${getCloseButtonText()}</button>
       </div>
     </div>
   `;
@@ -543,6 +677,100 @@ function showExitSummary(existingModal) {
     clearSession();
     window.location.href = "https://www.google.com";
   };
+}
+function getTimeEndgamePlan() {
+  if (isNightScroll()) {
+    return {
+      startSeconds: 25 * 60,
+      stepSeconds: 5 * 60,
+      lockSeconds: 60
+    };
+  }
+
+  return {
+    startSeconds: 30 * 60,
+    stepSeconds: 10 * 60,
+    lockSeconds: 60
+  };
+}
+
+function maybeShowTimeWarning() {
+  if (modalShown) return false;
+  if (!isUserActivelyWatchingShortForm()) return false;
+
+  const activeSeconds = getActiveSessionSeconds();
+  const milestones = getTimeMilestonePlan();
+
+  for (const milestone of milestones) {
+    if (activeSeconds < milestone.seconds) continue;
+    if (triggeredTimeMilestones.has(milestone.seconds)) continue;
+
+    triggeredTimeMilestones.add(milestone.seconds);
+    persistSession();
+
+    const reason = makeTimeWarningReason(milestone.seconds);
+
+    if (milestone.type === "soft") {
+      showSoftInterrupt(reason);
+      return true;
+    }
+
+    const penaltySeconds = Math.min(30, continueCount * 5);
+    const lockSeconds = milestone.lockSeconds + penaltySeconds;
+
+    const lock = {
+      milestoneCount: `time:${milestone.seconds}`,
+      reason,
+      lockSeconds,
+      unlockAt: Date.now() + lockSeconds * 1000,
+      createdAt: Date.now()
+    };
+
+    pendingLock = lock;
+    persistSession();
+    showHardLock(lock);
+
+    return true;
+  }
+
+  const endgame = getTimeEndgamePlan();
+
+  if (activeSeconds >= endgame.startSeconds) {
+    const endgameMilestone =
+      endgame.startSeconds +
+      Math.floor((activeSeconds - endgame.startSeconds) / endgame.stepSeconds) *
+        endgame.stepSeconds;
+
+    const key = `time-endgame:${endgameMilestone}`;
+
+    if (!triggeredTimeMilestones.has(key)) {
+      triggeredTimeMilestones.add(key);
+      persistSession();
+
+      const penaltySeconds = Math.min(30, continueCount * 5);
+      const lockSeconds = endgame.lockSeconds + penaltySeconds;
+
+      const minutes = Math.floor(endgameMilestone / 60);
+
+      const lock = {
+        milestoneCount: key,
+        reason: isNightScroll()
+          ? `${minutes} minutes of night scrolling. This is sleep debt now.`
+          : `${minutes} minutes in. The loop is still going.`,
+        lockSeconds,
+        unlockAt: Date.now() + lockSeconds * 1000,
+        createdAt: Date.now()
+      };
+
+      pendingLock = lock;
+      persistSession();
+      showHardLock(lock);
+
+      return true;
+    }
+  }
+
+  return false;
 }
 
 function maybeShowWarning() {
@@ -881,17 +1109,8 @@ function isStoriesContext(video) {
 
   return false;
 }
-
-function checkReelChange() {
-  if (modalShown || isHardLocked) return;
-
-  const now = Date.now();
-
-  const isInstagram = location.hostname.includes("instagram.com");
-
+function isSupportedShortFormContext() {
   const platform = getPlatformId();
-  const isSupportedPlatform = platform === "instagram" || platform === "youtube";
-
   const hasVideos = document.querySelectorAll("video").length > 0;
 
   const isInstagramStoryPage =
@@ -910,11 +1129,25 @@ function checkReelChange() {
     location.pathname.includes("/shorts/") &&
     hasVideos;
 
-  const isShortFormContext =
-    isInstagramReelsContext || isYouTubeShortsContext;
+  return isInstagramReelsContext || isYouTubeShortsContext;
+}
+function hideLoopbreakerUI() {
+  overlay.style.display = "none";
+}
 
-  if (!isSupportedPlatform || !isShortFormContext) {
-    updateUI("idle");
+function showLoopbreakerUI() {
+  overlay.style.display = "block";
+}
+
+function checkReelChange() {
+  if (modalShown || isHardLocked) return;
+
+  const now = Date.now();
+
+  const isInstagram = location.hostname.includes("instagram.com");
+
+  if (!isSupportedShortFormContext()) {
+    hideLoopbreakerUI();
     return;
   }
   if (document.fullscreenElement || now < fullscreenCooldownUntil) {
@@ -1002,9 +1235,17 @@ setTimeout(() => {
 setInterval(checkReelChange, 600);
 
 setInterval(() => {
-  persistSession();
+  updateActiveWatchTime();
+
+  if (!isSupportedShortFormContext()) {
+    hideLoopbreakerUI();
+    persistSession();
+    return;
+  }
+
   updateUI();
   maybeShowWarning();
+  persistSession();
 }, 1000);
 
 window.addEventListener(
