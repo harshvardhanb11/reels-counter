@@ -1,4 +1,34 @@
-const SESSION_KEY = "loopbreaker:v3:active-session";
+function getPlatformId() {
+  if (location.hostname.includes("instagram.com")) return "instagram";
+  if (location.hostname.includes("youtube.com")) return "youtube";
+  return "unknown";
+}
+
+function getPlatformName() {
+  const platform = getPlatformId();
+
+  if (platform === "instagram") return "Instagram";
+  if (platform === "youtube") return "YouTube Shorts";
+
+  return "Short-form video";
+}
+
+function getContentSingular() {
+  const platform = getPlatformId();
+
+  if (platform === "youtube") return "short";
+  return "reel";
+}
+
+function getContentPlural() {
+  const platform = getPlatformId();
+
+  if (platform === "youtube") return "shorts";
+  return "reels";
+}
+
+const PLATFORM_ID = getPlatformId();
+const SESSION_KEY = `loopbreaker:v3:active-session:${PLATFORM_ID}`;
 const SESSION_TIMEOUT_MS = 10 * 60 * 1000;
 const DWELL_MS = 550;
 const FULLSCREEN_COOLDOWN_MS = 1800;
@@ -161,10 +191,10 @@ function formatTime(seconds) {
 
 function getImpactLine() {
   const seconds = Math.floor((Date.now() - startTime) / 1000);
-  const reelWord = reelCount === 1 ? "reel" : "reels";
+  const reelWord = reelCount === 1 ? getContentSingular() : getContentPlural();
 
   if (reelCount === 0) {
-    return "No reels counted yet.";
+    return `No ${reelWord} counted yet.`;
   }
 
   return `${reelCount} ${reelWord} watched in ${formatTime(seconds)}.`;
@@ -236,7 +266,7 @@ function updateUI(status = lastStatus) {
     <div class="loopbreaker-stats">
       <div>
         <div class="loopbreaker-number">${reelCount}</div>
-        <div class="loopbreaker-label">reels watched</div>
+        <div class="loopbreaker-label">${getContentPlural()} watched</div>
       </div>
       <div>
         <div class="loopbreaker-number">${formatTime(seconds)}</div>
@@ -266,7 +296,7 @@ function updateUI(status = lastStatus) {
     ${nightWarning}
 
     <div class="loopbreaker-status">
-      Refresh will not reset this loop.
+      Refresh will not reset this ${getPlatformName()} loop.
     </div>
   `;
 }
@@ -395,7 +425,7 @@ function showHardLock(lock) {
       <h2>${lock.reason}</h2>
 
       <p class="loopbreaker-impact-modal">
-        <strong>${reelCount}</strong> reels watched in <strong>${formatTime(sessionSeconds)}</strong>.
+        <strong>${reelCount}</strong> ${getContentPlural()} in <strong>${formatTime(sessionSeconds)}</strong>.
       </p>
 
       <p>
@@ -492,7 +522,7 @@ function showExitSummary(existingModal) {
       <h2>You broke the loop.</h2>
 
       <p class="loopbreaker-impact-modal">
-        <strong>${reelCount}</strong> reels watched in <strong>${formatTime(seconds)}</strong>.
+        <strong>${reelCount}</strong> ${getContentPlural()} in <strong>${formatTime(seconds)}</strong>.
       </p>
 
       <p>
@@ -614,26 +644,55 @@ function getMostVisibleVideo() {
 
 // ---------- Stable Reel Identity ----------
 function getReelIdFromUrl() {
-  const match =
-    location.pathname.match(/\/reel\/([^/?#]+)/) ||
-    location.pathname.match(/\/reels\/([^/?#]+)/);
+  const platform = getPlatformId();
 
-  return match ? match[1] : "";
+  if (platform === "instagram") {
+    const match =
+      location.pathname.match(/\/reel\/([^/?#]+)/) ||
+      location.pathname.match(/\/reels\/([^/?#]+)/);
+
+    return match ? `ig:${match[1]}` : "";
+  }
+
+  if (platform === "youtube") {
+    const match = location.pathname.match(/\/shorts\/([^/?#]+)/);
+
+    return match ? `yt:${match[1]}` : "";
+  }
+
+  return "";
 }
 
 function getReelIdFromNearbyLinks(video) {
+  const platform = getPlatformId();
   let node = video;
 
   for (let depth = 0; depth < 8 && node; depth++) {
     if (node.querySelectorAll) {
-      const links = Array.from(node.querySelectorAll('a[href*="/reel/"]'));
+      const selector =
+        platform === "youtube"
+          ? 'a[href*="/shorts/"]'
+          : 'a[href*="/reel/"]';
+
+      const links = Array.from(node.querySelectorAll(selector));
 
       for (const link of links) {
         const href = link.getAttribute("href") || "";
-        const match = href.match(/\/reel\/([^/?#]+)/);
 
-        if (match && match[1]) {
-          return match[1];
+        if (platform === "youtube") {
+          const match = href.match(/\/shorts\/([^/?#]+)/);
+
+          if (match && match[1]) {
+            return `yt:${match[1]}`;
+          }
+        }
+
+        if (platform === "instagram") {
+          const match = href.match(/\/reel\/([^/?#]+)/);
+
+          if (match && match[1]) {
+            return `ig:${match[1]}`;
+          }
         }
       }
     }
@@ -713,11 +772,11 @@ function getCanonicalKey(reelKey) {
   if (!reelKey) return "";
 
   if (reelKey.startsWith("url:")) {
-    return `reel:${reelKey.slice(4)}`;
+    return `shortform:${reelKey.slice(4)}`;
   }
 
   if (reelKey.startsWith("link:")) {
-    return `reel:${reelKey.slice(5)}`;
+    return `shortform:${reelKey.slice(5)}`;
   }
 
   return reelKey;
@@ -792,6 +851,9 @@ function recordReel(reelKey, fingerprint = "") {
 }
 
 function isStoriesContext(video) {
+    if (getPlatformId() !== "instagram") {
+    return false;
+  }
   if (
     location.pathname.includes("/stories/") ||
     location.pathname.includes("/stories")
@@ -827,15 +889,31 @@ function checkReelChange() {
 
   const isInstagram = location.hostname.includes("instagram.com");
 
-  const hasVideos = document.querySelectorAll("video").length > 0;
-  const isStoryPage = location.pathname.includes("/stories/");
+  const platform = getPlatformId();
+  const isSupportedPlatform = platform === "instagram" || platform === "youtube";
 
-  const isReelsContext =
-    location.pathname.includes("/reels") ||
-    location.pathname.includes("/reel/") ||
-    (hasVideos && !isStoryPage);
-    
-  if (!isInstagram || !isReelsContext) {
+  const hasVideos = document.querySelectorAll("video").length > 0;
+
+  const isInstagramStoryPage =
+    platform === "instagram" && location.pathname.includes("/stories/");
+
+  const isInstagramReelsContext =
+    platform === "instagram" &&
+    (
+      location.pathname.includes("/reels") ||
+      location.pathname.includes("/reel/") ||
+      (hasVideos && !isInstagramStoryPage)
+    );
+
+  const isYouTubeShortsContext =
+    platform === "youtube" &&
+    location.pathname.includes("/shorts/") &&
+    hasVideos;
+
+  const isShortFormContext =
+    isInstagramReelsContext || isYouTubeShortsContext;
+
+  if (!isSupportedPlatform || !isShortFormContext) {
     updateUI("idle");
     return;
   }
