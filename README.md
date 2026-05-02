@@ -22,7 +22,6 @@
 
 ---
 
-
 ## The idea
 
 Short-form video feeds are addiction loops disguised as entertainment.
@@ -38,8 +37,6 @@ It does not care whether this was supposed to be a five-minute break.
 
 It just serves the next reel.
 
-They just serve the next reel.
-
 You open Instagram or YouTube for a quick break.  
 You scroll once.  
 Then again.  
@@ -54,27 +51,28 @@ Before you notice it, the “quick break” has become:
 ```text
 30 reels watched in 46s.
 This is not a break anymore.
+```
 
 Loopbreaker exists for that moment.
 
-Most screen-time apps are post-mortems.
+Most screen-time apps are post-mortems.  
 They tell you at night that you wasted three hours.
 
 Loopbreaker is different.
 
 It interrupts the addiction loop while it is happening.
 
-It counts the reels.
-It shows the time.
-It measures loop pressure.
+It counts the reels.  
+It shows the time.  
+It measures loop pressure.  
 Then it forces friction before the next video can pull you deeper.
 
 Research on short-video addiction points to the real risk signals: prolonged watch time, excessive video consumption, late-night usage, reduced content diversity, loss of time awareness, and repeated difficulty stopping. Loopbreaker turns those signals into real-time intervention.
 
 It is built on one belief:
 
-You do not beat infinite scroll with willpower alone.
-You beat it by adding a stopping point where the platform removed one.
+> You do not beat infinite scroll with willpower alone.  
+> You beat it by adding a stopping point where the platform removed one.
 
 Loopbreaker is not just a counter.
 
@@ -82,18 +80,19 @@ It is an addiction-killer for Reels-style feeds.
 
 The feed has no finish line.
 
-Loopbreaker gives you one.
+**Loopbreaker gives you one.**
+
 ---
 
 ## What Loopbreaker does
 
-Loopbreaker runs on Instagram Web and shows a floating overlay while you scroll.
+Loopbreaker runs on Instagram Reels and YouTube Shorts in the browser, showing a floating overlay while you scroll.
 
 It tracks:
 
 | Signal | Meaning |
 |---|---|
-| Reels watched | How many unique reels/videos you consumed |
+| Reels watched | How many unique Reels-style videos you consumed |
 | Active watch time | How long you were actually watching, not just leaving the tab open |
 | Loop pressure | How deep you are in the scroll loop |
 | Night scroll | Whether you are scrolling during high-risk late-night hours |
