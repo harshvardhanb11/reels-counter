@@ -22,7 +22,7 @@
 
 ---
 
-```md
+
 ## The idea
 
 Short-form video feeds are addiction loops disguised as entertainment.
@@ -395,7 +395,7 @@ Normal reminders are easy to ignore.
 When the loop gets strong enough, the app blocks interaction briefly and forces a real pause.
 
 ---
-```md
+
 ### Soft warnings were too easy to miss
 
 Early soft warnings only appeared as small text inside the floating overlay.
